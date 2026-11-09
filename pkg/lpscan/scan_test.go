@@ -27,7 +27,7 @@ func TestScanInterleavesAndDedupes(t *testing.T) {
 		}
 		return pools, nil // every endpoint returns the same pools
 	})
-	r, err := newTestScanner(src).Scan(context.Background(), DefaultParams())
+	r, err := newTestScanner(src).Scan(context.Background(), legacyParams())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestScanEndpointFailureIsAWarning(t *testing.T) {
 		}
 		return pools, nil
 	})
-	r, err := newTestScanner(src).Scan(context.Background(), DefaultParams())
+	r, err := newTestScanner(src).Scan(context.Background(), legacyParams())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestScanTimeoutKeepsPartialResults(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	r, err := newTestScanner(src).Scan(ctx, DefaultParams())
+	r, err := newTestScanner(src).Scan(ctx, legacyParams())
 	if err != nil {
 		t.Fatalf("want partial result, got %v", err)
 	}
@@ -94,7 +94,7 @@ func TestScanNothingFetchedIsAnError(t *testing.T) {
 	src := PoolSourceFunc(func(ctx context.Context, ep geckoterminal.Endpoint, page int) ([]geckoterminal.Pool, error) {
 		return nil, errors.New("connection refused")
 	})
-	_, err := newTestScanner(src).Scan(context.Background(), DefaultParams())
+	_, err := newTestScanner(src).Scan(context.Background(), legacyParams())
 	var fe *FetchError
 	if !errors.As(err, &fe) {
 		t.Fatalf("err = %v, want *FetchError", err)
@@ -102,7 +102,7 @@ func TestScanNothingFetchedIsAnError(t *testing.T) {
 }
 
 func TestScanRejectsInvalidParams(t *testing.T) {
-	p := DefaultParams()
+	p := legacyParams()
 	p.Window = "4h"
 	_, err := newTestScanner(nil).Scan(context.Background(), p)
 	var pe *ParamError

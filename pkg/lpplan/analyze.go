@@ -26,17 +26,18 @@ const (
 
 // Reason codes.
 const (
-	ReasonHoneypot   = "HONEYPOT"
-	ReasonNoDepth    = "NO_DEPTH"
-	ReasonSkew       = "SKEW"
-	ReasonWeak       = "WEAK"
-	ReasonSuspect    = "SUSPECT"
-	ReasonSwing      = "SWING"
-	ReasonNew        = "NEW"
-	ReasonFading     = "FADING"
-	ReasonFeeUnknown = "FEE_UNKNOWN"
-	ReasonILGTFees   = "IL_GT_FEES"
-	ReasonNoHistory  = "NO_HISTORY"
+	ReasonHoneypot    = "HONEYPOT"
+	ReasonNoDepth     = "NO_DEPTH"
+	ReasonSkew        = "SKEW"
+	ReasonWeak        = "WEAK"
+	ReasonSuspect     = "SUSPECT"
+	ReasonSwing       = "SWING"
+	ReasonNew         = "NEW"
+	ReasonFading      = "FADING"
+	ReasonFeeUnknown  = "FEE_UNKNOWN"
+	ReasonILGTFees    = "IL_GT_FEES"
+	ReasonNoHistory   = "NO_HISTORY"
+	ReasonLowTurnover = "LOW_TURNOVER"
 )
 
 const (
@@ -142,13 +143,23 @@ func row(pool geckoterminal.Pool, now time.Time) PoolRow {
 	}
 }
 
-// Choose returns the index of the pool to build the plan on, or -1: among
-// pools with at least MinLiquidityUSD, the highest est. fee yield/d; when
-// none has a known fee, the highest turnover/d. Ties go to liquidity.
+// Choose returns the index of the pool to build the plan on, or -1. Among
+// pools with at least MinLiquidityUSD it prefers those whose turnover/d is
+// at or above TurnoverExitMin (a pool already under its exit threshold
+// does not pay, whatever its fee); only when none clears it are the rest
+// considered. Within that set: the highest est. fee yield/d, or, when none
+// has a known fee, the highest turnover/d. Ties go to liquidity.
 func Choose(rows []PoolRow) int {
+	if i := choose(rows, TurnoverExitMin); i >= 0 {
+		return i
+	}
+	return choose(rows, 0)
+}
+
+func choose(rows []PoolRow, minTurnover float64) int {
 	best, bestFee := -1, false
 	for i, r := range rows {
-		if r.LiquidityUSD < MinLiquidityUSD {
+		if r.LiquidityUSD < MinLiquidityUSD || r.TurnoverD < minTurnover {
 			continue
 		}
 		hasFee := r.EstFeeYieldD != nil
@@ -221,6 +232,9 @@ func Analyze(in Input, p Params, now time.Time) *Plan {
 	}
 	if c.TurnoverD > 0 && c.turnover6hD < FadingShare*c.TurnoverD {
 		add(ReasonFading, DecisionWait, "volume is fading: 6h turnover/d %.2f vs 24h %.2f", c.turnover6hD, c.TurnoverD)
+	}
+	if c.TurnoverD < TurnoverExitMin {
+		add(ReasonLowTurnover, DecisionWait, "chosen pool turnover/d %.2f is below the %.1f exit threshold: volume does not pay for a position", c.TurnoverD, TurnoverExitMin)
 	}
 	if c.FeePct == nil {
 		add(ReasonFeeUnknown, DecisionWait, "fee tier unknown (not in the pool name): fee yield cannot be estimated")

@@ -41,7 +41,11 @@ type Definition struct {
 type Legend struct {
 	Flags      []Definition `json:"flags"`
 	Grades     []Definition `json:"grades"`
+	Verdicts   []Definition `json:"verdicts"`
+	Kind       string       `json:"kind"`
+	Net7d      string       `json:"net_7d"`
 	Pick       string       `json:"pick"`
+	PickGuard  string       `json:"pick_guard"`
 	Disclaimer string       `json:"disclaimer"`
 }
 
@@ -60,7 +64,15 @@ func LegendData() Legend {
 			{string(GradeStrong), ">=0.5"},
 			{string(GradeSuspect), ">5 or SKEW"},
 		},
+		Verdicts: []Definition{
+			{"GO", "no blocking signal (same verdict as /lp-plan)"},
+			{"WAIT", "a signal says hold off"},
+			{"AVOID", "a hard blocker"},
+		},
+		Kind:       "stock = base token name ends with \"Robinhood Token\" (tokenized stock or ETF); meme = everything else",
+		Net7d:      "est. 7-day fees + IL at the low edge (full range: at a -1σ move); rows sort by verdict, then net 7d",
 		Pick:       "best candidate to review first, not a recommendation to enter",
+		PickGuard:  "never ★: top 10 holders above 80% or honeypot status not confirmed \"no\"",
 		Disclaimer: "Candidates to review, not a safety check: rug pulls and honeypots are not detected.",
 	}
 }

@@ -42,7 +42,7 @@ func TestTable(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"lpscan  network=robinhood  window=6h  max-mcap=$5.0M  min-liq=$50.0K  min-vol=$25.0K  top=5",
+		"lpscan  network=robinhood  source=trending  kind=meme  window=6h  mcap=$1.0M-$20.0M  min-liq=$50.0K  min-vol=$25.0K  top=5  detail=full",
 		"scanned 142 pools -> 23 passed filters -> 18 coins",
 		"VOL(6h)", "CHG(6h)", "TURNOVER/d", "EST YIELD/d", "CA",
 		"★1", "$412.3K", "$1.9M", "0.3%", "1.38%", "+8.2%", "strong", caABC,
@@ -59,6 +59,45 @@ func TestTable(t *testing.T) {
 		t.Error("warnings must not be in the table output")
 	}
 }
+
+func TestTableDetailed(t *testing.T) {
+	r := sample()
+	holders := 17027
+	r.Results[0].Detail = &lpscan.Detail{Level: lpscan.DetailFull, GTScore: f(79.68), HoldersCount: &holders,
+		Top10Pct: f(30.82), IsHoneypot: "no", Plan: &lpscan.PlanDetail{
+			Verdict: "go", ChosenPool: strPtr("0xpool1"), ChosenPair: "ABC/WETH", ChosenFeePct: f(1), ChosenLiquidityUSD: f(366_385),
+			Mode: "full_range", Sigma7dPct: f(61.48), EstFeeYieldD: f(1.394), EstFee7dPct: f(9.76), ILLowPct: f(-4.55), Net7dPct: f(5.21),
+			TriggeredExits: []string{}}}
+	r.Results[1].Detail = &lpscan.Detail{Level: lpscan.DetailFull, IsHoneypot: "unknown", Plan: &lpscan.PlanDetail{
+		Verdict: "wait", Reasons: []lpscan.PlanReason{{Code: "LOW_TURNOVER", Tier: "wait", Message: "chosen pool turnover/d 0.37 is below the 0.5 exit threshold"}},
+		ChosenPool: strPtr("0xpool2"), ChosenPair: "XYZ/USDG", ChosenFeePct: f(3.04), ChosenLiquidityUSD: f(68_701), Mode: "full_range",
+		TriggeredExits: []string{"TURNOVER_DROP"}}}
+	r.Pick.Reason = "highest net 7d (est. fees minus IL) among GO coins"
+
+	var buf bytes.Buffer
+	if err := Table(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"VERDICT", "HOLDERS", "TOP10", "HONEYPOT", "NET 7d", "EXITS NOW",
+		"★1", "GO", "79.7", "17027", "30.8%", "ABC/WETH 1% $366.4K", "61.5%", "full range", "1.39%", "9.8%", "-4.5%", "5.2%", caABC,
+		"WAIT", "unknown", "TURNOVER_DROP",
+		"GO 1 · WAIT 1",
+		"XYZ: LOW_TURNOVER (wait): chosen pool turnover/d 0.37",
+		"★ pick: ABC (" + caABC + ") — highest net 7d",
+		"VERDICT GO no blocking signal", "NET 7d  est. 7-day fees", "KIND ", "never ★: top 10 holders above 80%",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("table missing %q\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "SCORE") {
+		t.Error("detailed layout should not print the score columns")
+	}
+}
+
+func strPtr(s string) *string { return &s }
 
 func TestTableZeroResultsStillPrintsLegend(t *testing.T) {
 	r := sample()

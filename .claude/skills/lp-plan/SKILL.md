@@ -53,7 +53,7 @@ In this order:
 
 1. **Token**: `token.symbol`, `token.name`, full `token.address`, price, mcap (note `mcap_source` when `fdv`), `gt_score`, `holders_count`, `top10_pct`, `is_honeypot`, mint / freeze authority (null = "none"). Then every `info_flags[].message`.
 2. **Warnings**: every entry in `warnings`, or "none".
-3. **Pools**: one row per `pools` entry: pair, dex, fee (or "unknown"), liquidity, 24h volume, `turnover_d`, `est_fee_yield_d` (or "n/a"), grade, flags (or "none"), full `pool_address`. Mark `chosen: true` with ★.
+3. **Pools**: one row per `pools` entry: pair, dex, fee (or "unknown"), liquidity, 24h volume, `turnover_d`, `est_fee_yield_d` (or "n/a"), grade, flags (or "none"), full `pool_address`. Mark `chosen: true` with ★. The CLI prefers pools with turnover/d ≥ 0.5 (the exit threshold) over higher-fee pools that barely trade, so ★ is not always the highest yield; a `LOW_TURNOVER` reason means no pool clears 0.5.
 4. **Verdict**: `verdict.decision` in caps (GO / WAIT / AVOID), then every `verdict.reasons[]` as `code (tier): message`.
 5. **Strategy**: only when `strategy` is not null. Title it "Strategy" for GO, "If you still enter" for WAIT. Show `risk`, `price` with `price_unit`, mode (`concentrated`: `range_low`–`range_high` with `range_low_pct` / `range_high_pct`; `full_range`: `full_range_reason`), `sigma_7d_pct`, `base_fee_yield_d` (pool yield, no concentration), `concentration`, `est_fee_yield_d`, `est_fee_7d_pct`, IL at the edges (`il_low_pct`, `il_high_pct`). When `strategy.deposit` is not null: base and quote amounts and USD, `est_fees_d_usd`, `il_low_usd`, `il_high_usd`. AVOID: no strategy section at all.
 6. **Exit signals**: every `exit_signals[].message` (GO and WAIT).

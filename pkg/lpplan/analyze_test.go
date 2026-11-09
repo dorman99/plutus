@@ -191,6 +191,59 @@ func TestChoosePool(t *testing.T) {
 	}
 }
 
+// HOOKR on 2026-11-09: the 3.04% pool won on yield with turnover/d 0.37,
+// below the 0.5 exit threshold, while a 1% pool turned over 0.88.
+func TestChoosePrefersTurnoverAboveExit(t *testing.T) {
+	highFeeIdle := pool("0xidle", func(p *geckoterminal.Pool) {
+		p.Name = "ABC / USDG 3.04%"
+		p.ReserveUSD = f(68_701)
+		p.VolumeUSD = map[string]*float64{"h24": f(25_216), "h6": f(6_300)}
+	})
+	busy := pool("0xbusy", func(p *geckoterminal.Pool) {
+		p.Name = "ABC / WETH 1%"
+		p.ReserveUSD = f(90_758)
+		p.VolumeUSD = map[string]*float64{"h24": f(79_580), "h6": f(20_000)}
+	})
+	rows := Rows([]geckoterminal.Pool{highFeeIdle, busy}, ca, now)
+	if i := Choose(rows); rows[i].PoolAddress != "0xbusy" {
+		t.Errorf("chose %s, want the pool with turnover/d above %.1f", rows[i].PoolAddress, TurnoverExitMin)
+	}
+
+	// No pool clears the threshold: fall back to highest yield.
+	idle2 := pool("0xidle2", func(p *geckoterminal.Pool) {
+		p.Name = "ABC / USDG 0.3%"
+		p.VolumeUSD = map[string]*float64{"h24": f(30_000), "h6": f(7_500)}
+	})
+	rows = Rows([]geckoterminal.Pool{highFeeIdle, idle2}, ca, now)
+	if i := Choose(rows); rows[i].PoolAddress != "0xidle" {
+		t.Errorf("fallback chose %s, want highest yield", rows[i].PoolAddress)
+	}
+}
+
+func TestLowTurnoverIsWait(t *testing.T) {
+	// turnover/d 0.4: decent grade, below the exit threshold.
+	in := input(pool("0xp1", func(p *geckoterminal.Pool) {
+		p.Name = "ABC / USDG 3%"
+		p.VolumeUSD = map[string]*float64{"h24": f(40_000), "h6": f(10_000)}
+	}))
+	p := Analyze(in, Params{CA: ca}, now)
+	if p.Verdict.Decision != DecisionWait || codes(p) != ReasonLowTurnover {
+		t.Fatalf("verdict = %s %s, want wait %s", p.Verdict.Decision, codes(p), ReasonLowTurnover)
+	}
+	if p.Strategy == nil {
+		t.Error("wait keeps the strategy")
+	}
+
+	// At the threshold: no reason.
+	in = input(pool("0xp1", func(p *geckoterminal.Pool) {
+		p.VolumeUSD = map[string]*float64{"h24": f(50_000), "h6": f(12_500)}
+		p.Name = "ABC / USDG 3%"
+	}))
+	if p := Analyze(in, Params{CA: ca}, now); strings.Contains(codes(p), ReasonLowTurnover) {
+		t.Errorf("turnover at threshold flagged: %s", codes(p))
+	}
+}
+
 func TestCAAsQuote(t *testing.T) {
 	p := pool("0xq", func(p *geckoterminal.Pool) {
 		p.BaseToken, p.QuoteToken = geckoterminal.Token{Address: quote, Symbol: "MEME"}, geckoterminal.Token{Address: ca, Symbol: "ABC"}

@@ -22,12 +22,14 @@ type Stats struct {
 	Coins   int `json:"coins"`   // distinct coins among passed pools
 }
 
-// Row is one coin, represented by its highest-scoring pool.
+// Row is one coin, represented by its highest-scoring pool. Detail, when
+// present, may build its plan on a different pool of the same coin.
 // Percent fields are percentages (0.3 means 0.3%).
 type Row struct {
 	Rank           int        `json:"rank"`
 	CoinSymbol     string     `json:"coin_symbol"`
 	CoinAddress    string     `json:"coin_address"`
+	Kind           Kind       `json:"kind"`
 	Pair           string     `json:"pair"`
 	Dex            string     `json:"dex"`
 	LiquidityUSD   float64    `json:"liquidity_usd"`
@@ -48,6 +50,7 @@ type Row struct {
 	PoolCreatedAt  *time.Time `json:"pool_created_at"`
 	PoolAddress    string     `json:"pool_address"`
 	URL            string     `json:"url"`
+	Detail         *Detail    `json:"detail"` // null without a Detailer
 }
 
 // HasFlag reports whether the row carries f.

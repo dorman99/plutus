@@ -25,6 +25,15 @@ import (
 //	         VWX no price change, YZA mcap and fdv 0
 var testNow = time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 
+// legacyParams are the stage-1 defaults the fixture was designed for: no
+// minimum market cap, $5M maximum, every endpoint and kind.
+func legacyParams() Params {
+	p := DefaultParams()
+	p.MinMcap, p.MaxMcap = 0, 5_000_000
+	p.Source, p.Kind = SourceAll, KindAll
+	return p
+}
+
 func loadFixture(t *testing.T) []geckoterminal.Pool {
 	t.Helper()
 	f, err := os.Open("testdata/pools.json")
@@ -73,7 +82,7 @@ func row(t *testing.T, r *Result, sym string) Row {
 func near(a, b float64) bool { return math.Abs(a-b) < 0.005 }
 
 func TestRankDefaults(t *testing.T) {
-	r := Rank(loadFixture(t), DefaultParams(), testNow)
+	r := Rank(loadFixture(t), legacyParams(), testNow)
 
 	if got, want := r.Stats, (Stats{Scanned: 15, Passed: 9, Coins: 8}); got != want {
 		t.Errorf("stats = %+v, want %+v", got, want)
@@ -131,7 +140,7 @@ func flagStrings(fs []Flag) []string {
 }
 
 func TestRankOneRowPerCoinUsesBestPool(t *testing.T) {
-	p := DefaultParams()
+	p := legacyParams()
 	p.Top = MaxTop
 	r := Rank(loadFixture(t), p, testNow)
 	n := 0
@@ -172,7 +181,7 @@ func TestRankParams(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p := DefaultParams()
+			p := legacyParams()
 			tc.mod(&p)
 			if got := coins(Rank(loadFixture(t), p, testNow)); got != tc.want {
 				t.Errorf("coins = %s, want %s", got, tc.want)
@@ -182,7 +191,7 @@ func TestRankParams(t *testing.T) {
 }
 
 func TestRankWindowSwitchesFields(t *testing.T) {
-	p := DefaultParams()
+	p := legacyParams()
 	p.Window = Window24h
 	r := Rank(loadFixture(t), p, testNow)
 	abc := row(t, r, "ABC")
@@ -199,26 +208,26 @@ func TestPick(t *testing.T) {
 	pools := loadFixture(t)
 
 	// yield beats score: HIJ scores higher but has no fee; JKL has a fee
-	p := DefaultParams()
+	p := legacyParams()
 	p.MaxMcap = 1_000_000
 	if r := Rank(pools, p, testNow); r.Pick == nil || r.Pick.CoinSymbol != "JKL" {
 		t.Errorf("pick = %+v, want JKL by yield", r.Pick)
 	}
 
 	// no eligible row has a fee: fall back to score
-	r := Rank(only(pools, "XYZ", "HIJ"), DefaultParams(), testNow)
+	r := Rank(only(pools, "XYZ", "HIJ"), legacyParams(), testNow)
 	if r.Pick == nil || r.Pick.CoinSymbol != "HIJ" || !strings.Contains(r.Pick.Reason, "fee tier unknown") {
 		t.Errorf("pick = %+v, want HIJ by score", r.Pick)
 	}
 
 	// only flagged rows: no pick
-	if r := Rank(only(pools, "XYZ", "GHI", "BCD"), DefaultParams(), testNow); r.Pick != nil {
+	if r := Rank(only(pools, "XYZ", "GHI", "BCD"), legacyParams(), testNow); r.Pick != nil {
 		t.Errorf("pick = %+v, want nil", r.Pick)
 	}
 }
 
 func TestRankZeroResults(t *testing.T) {
-	p := DefaultParams()
+	p := legacyParams()
 	p.MinLiquidity = 1e12
 	r := Rank(loadFixture(t), p, testNow)
 	if len(r.Results) != 0 || r.Results == nil || r.Pick != nil || r.Stats.Scanned != 15 {
@@ -228,7 +237,7 @@ func TestRankZeroResults(t *testing.T) {
 
 func TestRankDedupesPoolsByAddress(t *testing.T) {
 	pools := loadFixture(t)
-	r := Rank(append(pools, pools...), DefaultParams(), testNow)
+	r := Rank(append(pools, pools...), legacyParams(), testNow)
 	if r.Stats.Scanned != 15 || r.Stats.Passed != 9 {
 		t.Errorf("stats with duplicates = %+v", r.Stats)
 	}
@@ -268,7 +277,7 @@ func TestValidate(t *testing.T) {
 		{func(p *Params) { p.Pages = 0 }, "--pages must be between 1 and 10"},
 	}
 	for _, tc := range tests {
-		p := DefaultParams()
+		p := legacyParams()
 		tc.mod(&p)
 		err := p.Validate()
 		got := ""

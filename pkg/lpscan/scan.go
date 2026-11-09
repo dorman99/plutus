@@ -28,11 +28,19 @@ func GeckoSource(c *geckoterminal.Client) PoolSource {
 	})
 }
 
-// Endpoints are fetched in this order on every page.
+// Endpoints are fetched in this order on every page with --source all.
 var Endpoints = []geckoterminal.Endpoint{
 	geckoterminal.EndpointPools,
 	geckoterminal.EndpointTrending,
 	geckoterminal.EndpointNew,
+}
+
+// endpoints returns the listings fetched for src.
+func endpoints(src Source) []geckoterminal.Endpoint {
+	if src == SourceTrending {
+		return []geckoterminal.Endpoint{geckoterminal.EndpointTrending}
+	}
+	return Endpoints
 }
 
 // FetchError means no pool data could be fetched at all.
@@ -50,14 +58,19 @@ func (e *FetchError) Unwrap() []error { return e.Errs }
 // Scanner fetches pools and ranks them. It holds no per-scan state, so one
 // Scanner can be reused across scans (e.g. by a scheduled watcher).
 type Scanner struct {
-	src PoolSource
-	now func() time.Time
+	src    PoolSource
+	detail Detailer
+	now    func() time.Time
 }
 
 // New returns a Scanner reading from src.
 func New(src PoolSource) *Scanner { return &Scanner{src: src, now: time.Now} }
 
-// Scan fetches up to len(Endpoints) × p.Pages pages, interleaved by page so
+// WithDetailer makes Scan add per-coin detail (Params.Detail) to the top
+// rows and order them by it. Without one, rows carry no detail.
+func (s *Scanner) WithDetailer(d Detailer) *Scanner { s.detail = d; return s }
+
+// Scan fetches up to (endpoints for p.Source) × p.Pages pages, interleaved by page so
 // running out of time loses the deepest pages rather than a whole endpoint.
 // The scan budget is ctx's deadline.
 //
@@ -74,14 +87,15 @@ func (s *Scanner) Scan(ctx context.Context, p Params) (*Result, error) {
 		warnings []string
 		errs     []error
 		fetched  int
-		planned  = len(Endpoints) * p.Pages
+		eps      = endpoints(p.Source)
+		planned  = len(eps) * p.Pages
 		done     = map[geckoterminal.Endpoint]bool{} // failed or exhausted
 		timedOut bool
 	)
 
 fetch:
 	for page := 1; page <= p.Pages; page++ {
-		for _, ep := range Endpoints {
+		for _, ep := range eps {
 			if done[ep] {
 				continue
 			}
@@ -118,5 +132,9 @@ fetch:
 
 	res := Rank(pools, p, s.now())
 	res.Warnings = append(res.Warnings, warnings...)
+	if s.detail != nil && len(res.Results) > 0 {
+		enrich(ctx, s.detail, res)
+		Finalize(res)
+	}
 	return res, nil
 }

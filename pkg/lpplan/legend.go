@@ -36,6 +36,7 @@ func LegendData() Legend {
 			d(ReasonFeeUnknown, "wait: fee tier not in the pool name"),
 			d(ReasonILGTFees, "wait: base 7-day fees (before concentration) below IL at the range edge"),
 			d(ReasonNoHistory, "wait: fewer than 24 hourly candles"),
+			d(ReasonLowTurnover, "wait: chosen pool turnover/d below the 0.5 exit threshold (no pool clears it)"),
 		},
 		InfoFlags: []lpscan.Definition{
 			d("TOP10", "top 10 holders own more than 80% (shown, does not decide)"),

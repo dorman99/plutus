@@ -22,8 +22,9 @@ var Majors = map[string]string{
 
 const poolURLFormat = "https://www.geckoterminal.com/%s/pools/%s"
 
-// Rank turns raw pools into a Result: dedupe, hard filters, score, grade,
-// one row per coin, top N and the pick. It is pure; now is the scan time
+// Rank turns raw pools into a Result: dedupe, hard filters (kind, market
+// cap, liquidity, volume), score, grade, one row per coin, top N and the
+// pick. It is pure; now is the scan time
 // used for the NEW flag and Result.ScannedAt.
 func Rank(pools []geckoterminal.Pool, p Params, now time.Time) *Result {
 	res := &Result{
@@ -63,11 +64,8 @@ func Rank(pools []geckoterminal.Pool, p Params, now time.Time) *Result {
 	if len(rows) > p.Top {
 		rows = rows[:p.Top]
 	}
-	for i := range rows {
-		rows[i].Rank = i + 1
-	}
 	res.Results = rows
-	res.Pick = pick(rows)
+	Finalize(res)
 	return res
 }
 
@@ -98,7 +96,11 @@ func evaluate(pool geckoterminal.Pool, p Params, now time.Time) (Row, bool) {
 		}
 		flags = append(flags, FlagFDV)
 	}
-	if mcap > p.MaxMcap {
+	if mcap > p.MaxMcap || mcap < p.MinMcap {
+		return Row{}, false
+	}
+	kind := KindOf(pool.BaseToken.Name)
+	if p.Kind != KindAll && kind != p.Kind {
 		return Row{}, false
 	}
 
@@ -143,6 +145,7 @@ func evaluate(pool geckoterminal.Pool, p Params, now time.Time) (Row, bool) {
 	row := Row{
 		CoinSymbol:     baseSym,
 		CoinAddress:    pool.BaseToken.Address,
+		Kind:           kind,
 		Pair:           baseSym + "/" + quoteSym,
 		Dex:            pool.DexID,
 		LiquidityUSD:   liq,
@@ -187,35 +190,16 @@ func GradeFor(score float64, skew bool) Grade {
 	}
 }
 
-// pick chooses the coin to review first among the listed rows: graded
-// decent or strong with no SKEW, SWING or FDV flag; highest est. daily fee
-// yield, or highest score when no eligible row has a known fee.
-func pick(rows []Row) *Pick {
-	var byYield, byScore *Row
-	for i := range rows {
-		r := &rows[i]
-		if r.Grade != GradeDecent && r.Grade != GradeStrong {
-			continue
-		}
-		if r.HasFlag(FlagSkew) || r.HasFlag(FlagSwing) || r.HasFlag(FlagFDV) {
-			continue
-		}
-		if byScore == nil {
-			byScore = r // rows are already sorted by score
-		}
-		if r.EstFeeYieldD != nil && (byYield == nil || *r.EstFeeYieldD > *byYield.EstFeeYieldD) {
-			byYield = r
-		}
+// stockNameSuffix ends the name of every tokenized stock or ETF on
+// Robinhood Chain ("NVIDIA • Robinhood Token", "Intel • Robinhood Token").
+const stockNameSuffix = "Robinhood Token"
+
+// KindOf classifies a base token by its name.
+func KindOf(name string) Kind {
+	if strings.HasSuffix(strings.TrimSpace(name), stockNameSuffix) {
+		return KindStock
 	}
-	switch {
-	case byYield != nil:
-		return &Pick{byYield.Rank, byYield.CoinSymbol, byYield.CoinAddress,
-			"highest est. yield/d among unflagged coins"}
-	case byScore != nil:
-		return &Pick{byScore.Rank, byScore.CoinSymbol, byScore.CoinAddress,
-			"highest score among unflagged coins (fee tier unknown)"}
-	}
-	return nil
+	return KindMeme
 }
 
 var feeRe = regexp.MustCompile(`(\d+(?:\.\d+)?)%\s*$`)
