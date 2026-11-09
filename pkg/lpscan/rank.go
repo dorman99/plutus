@@ -139,7 +139,7 @@ func evaluate(pool geckoterminal.Pool, p Params, now time.Time) (Row, bool) {
 		yield = &y
 	}
 
-	baseSym, quoteSym := symbols(pool)
+	baseSym, quoteSym := Symbols(pool)
 	row := Row{
 		CoinSymbol:     baseSym,
 		CoinAddress:    pool.BaseToken.Address,
@@ -170,13 +170,17 @@ func evaluate(pool geckoterminal.Pool, p Params, now time.Time) (Row, bool) {
 	return row, true
 }
 
-func grade(r Row) Grade {
+func grade(r Row) Grade { return GradeFor(r.Score, r.HasFlag(FlagSkew)) }
+
+// GradeFor grades a per-day score; skew forces suspect. Shared with lpplan
+// so a pool is graded the same way in both stages.
+func GradeFor(score float64, skew bool) Grade {
 	switch {
-	case r.Score > GradeSuspectMax || r.HasFlag(FlagSkew):
+	case score > GradeSuspectMax || skew:
 		return GradeSuspect
-	case r.Score >= GradeStrongMin:
+	case score >= GradeStrongMin:
 		return GradeStrong
-	case r.Score >= GradeDecentMin:
+	case score >= GradeDecentMin:
 		return GradeDecent
 	default:
 		return GradeWeak
@@ -230,9 +234,9 @@ func ParseFeePct(name string) *float64 {
 	return &v
 }
 
-// symbols returns base and quote symbols, falling back to the pool name
+// Symbols returns base and quote symbols, falling back to the pool name
 // ("ABC / WETH 0.3%") when the API did not include the tokens.
-func symbols(pool geckoterminal.Pool) (string, string) {
+func Symbols(pool geckoterminal.Pool) (string, string) {
 	base, quote := pool.BaseToken.Symbol, pool.QuoteToken.Symbol
 	if base == "" || quote == "" {
 		name := feeRe.ReplaceAllString(strings.TrimSpace(pool.Name), "")

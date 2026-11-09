@@ -49,7 +49,7 @@ In this order:
 2. **Warnings**: every entry in `warnings` (failed endpoint, timeout = results may be incomplete).
 3. **Shortlist**: for every row in `results`: rank, `coin_symbol`, `pair`, `grade`, `flags` (or "none"), liquidity, volume, `turnover_d`, `est_fee_yield_d` (when not null), price change, and the **full `coin_address` (CA)**, never shortened. Mark the pick with ★.
 4. **Is this list good?** A short read from the grades: how many `strong` / `decent` / `weak` / `suspect`, and what the flags suggest (e.g. "2 of 5 are suspect: one-sided trading or implausible turnover"). If every row is `weak` or `suspect`, say the list is thin this run.
-5. **Pick**: if `pick` is not null: "★ Best candidate to review first: SYMBOL (full CA)" plus `pick.reason`. If `pick` is null: "No clear candidate this run."
+5. **Pick**: if `pick` is not null: "★ Best candidate to review first: SYMBOL (full CA)" plus `pick.reason`. If `pick` is null: "No clear candidate this run." To analyze any listed coin, run `/lp-plan <CA>`.
 6. **Legend + disclaimer**, always, every time, even with zero results:
 
 ```

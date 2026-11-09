@@ -1,8 +1,11 @@
 # plutus
 
-On-chain tooling for liquidity providers. Stage 1 is **lpscan**: a read-only
-scanner that ranks Robinhood Chain coins worth reviewing for a liquidity
-position, using the free GeckoTerminal public API (no key, no wallet).
+On-chain tooling for liquidity providers on Robinhood Chain, read-only, using
+the free GeckoTerminal public API (no key, no wallet).
+
+- Stage 1, **lpscan**: ranks coins worth reviewing for a liquidity position.
+- Stage 2, **lpplan**: for one coin (CA), picks the pool and gives a GO / WAIT /
+  AVOID verdict with a range, fee and IL estimate, deposit split and exit signals.
 
 ## Layout
 
@@ -11,7 +14,11 @@ pkg/geckoterminal/   rate-limited GeckoTerminal client (shared by every stage)
 pkg/lpscan/          scan logic: Params, Scanner.Scan, pure Rank, Result. Data only, never prints
 pkg/lpscan/present/  presenters: Table, JSON, Warnings. Render a Result, never scan
 cmd/lpscan/          CLI: flags + exit codes, wires Scan to a presenter
+pkg/lpplan/          plan logic: Params, Planner.Plan, pure Analyze, Plan. Data only, never prints
+pkg/lpplan/present/  presenters: Table, JSON, Warnings for a Plan
+cmd/lpplan/          CLI: lpplan <CA> [flags]
 .claude/skills/lp-scan/  Claude Code skill that runs lpscan --json
+.claude/skills/lp-plan/  Claude Code skill that runs lpplan --json
 ```
 
 Using the scanner from Go (any UI):
@@ -24,7 +31,7 @@ res, err := lpscan.New(lpscan.GeckoSource(geckoterminal.New())).Scan(ctx, lpscan
 ## Install
 
 ```sh
-go install ./cmd/lpscan     # Go 1.22+, no third-party dependencies
+go install ./cmd/lpscan ./cmd/lpplan   # Go 1.22+, no third-party dependencies
 ```
 
 ## Usage
@@ -68,6 +75,37 @@ percentages: `0.3` means 0.3%.
 
 **This is a list of candidates to review, not a safety check.** Rug pulls and
 honeypots are not detected.
+
+## lpplan
+
+```sh
+lpplan 0xa30fa36db767ad9ed3f7a60fc79526fb4d56d344                 # balanced, % only
+lpplan 0xa30f… --amount 500 --risk safe --json                     # $ figures + token split
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `<CA>` | required | Coin contract address (before or after the flags). |
+| `--amount` | none | Deposit in USD: adds the token split, fees $/day and IL in $. |
+| `--risk` | balanced | Range width: `safe` ±2σ, `balanced` ±1σ, `aggressive` ±0.5σ of 7-day volatility. |
+| `--json` | off | Print JSON instead of the brief. |
+| `--timeout` | 120s | Total budget. Four API calls: ~30–60 s on the free tier. |
+
+How the plan is built:
+
+1. Fetch token, token info (holders, GT score, honeypot), the token's pools (base or quote side), then hourly candles (7 days, priced in the quote token) for the chosen pool only. Info or candles failing is a warning; token or pools failing is exit 1.
+2. Every pool is measured on 24h data like lpscan: turnover/d, score, grade, `NEW`/`SKEW`/`SWING`, fee from the name, est. yield/d.
+3. ★ Chosen pool: liquidity ≥ $50K, highest est. yield/d (highest turnover/d if no fee is known).
+4. `σ_7d = stdev(hourly log returns) × √168`; range `price × e^(±k·σ_7d)`. Full range on v2 pools, without enough history, or when the range would exceed +60%.
+5. Base fee yield = turnover/d × fee; est. yield = base × concentration factor `1/(1 − e^(−kσ/2))`, capped at ×3 (in practice concentrated plans hit the cap). IL at each range edge from Uniswap v3 maths.
+6. Verdict: AVOID on `HONEYPOT`, `NO_DEPTH`, `SKEW`, `WEAK`; WAIT on `SUSPECT`, `SWING`, `NEW`, `FADING`, `FEE_UNKNOWN`, `IL_GT_FEES` (base 7-day fees below edge IL), `NO_HISTORY`; otherwise GO. Every matched reason is listed. No strategy on AVOID.
+7. Holder concentration (`TOP10` > 80%), mint/freeze authority and unknown honeypot status are shown but never decide the verdict.
+
+Exit codes: `0` success (including AVOID), `1` API or network error, `2` invalid argument.
+
+**A decision brief, not financial advice.** The concentrated fee estimate assumes the
+rest of the pool is spread wider; competing concentrated LPs lower real yield,
+so the verdict's IL check uses the base yield.
 
 ## Limits
 

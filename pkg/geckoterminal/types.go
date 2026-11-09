@@ -57,6 +57,9 @@ type Pool struct {
 	Transactions   map[string]*Txns
 	BaseToken      Token
 	QuoteToken     Token
+	BasePriceUSD   *float64 // base token price in USD
+	QuotePriceUSD  *float64 // quote token price in USD
+	BasePriceQuote *float64 // base token priced in the quote token (pool ratio)
 }
 
 // DecodePools decodes a JSON:API pool listing response, resolving base and
@@ -95,6 +98,9 @@ func DecodePools(r io.Reader) ([]Pool, error) {
 			Transactions:   a.Transactions,
 			BaseToken:      resolveToken(tokens, d.Relationships.BaseToken.id()),
 			QuoteToken:     resolveToken(tokens, d.Relationships.QuoteToken.id()),
+			BasePriceUSD:   a.BaseTokenPriceUSD.Val,
+			QuotePriceUSD:  a.QuoteTokenPriceUSD.Val,
+			BasePriceQuote: a.BaseTokenPriceQuoteToken.Val,
 		}
 		pools = append(pools, p)
 	}
@@ -141,15 +147,18 @@ type rawPool struct {
 	ID         string `json:"id"`
 	Type       string `json:"type"`
 	Attributes struct {
-		Address               string               `json:"address"`
-		Name                  string               `json:"name"`
-		PoolCreatedAt         *string              `json:"pool_created_at"`
-		MarketCapUSD          flexFloat            `json:"market_cap_usd"`
-		FDVUSD                flexFloat            `json:"fdv_usd"`
-		ReserveInUSD          flexFloat            `json:"reserve_in_usd"`
-		VolumeUSD             map[string]flexFloat `json:"volume_usd"`
-		PriceChangePercentage map[string]flexFloat `json:"price_change_percentage"`
-		Transactions          map[string]*Txns     `json:"transactions"`
+		Address                  string               `json:"address"`
+		Name                     string               `json:"name"`
+		PoolCreatedAt            *string              `json:"pool_created_at"`
+		MarketCapUSD             flexFloat            `json:"market_cap_usd"`
+		FDVUSD                   flexFloat            `json:"fdv_usd"`
+		ReserveInUSD             flexFloat            `json:"reserve_in_usd"`
+		VolumeUSD                map[string]flexFloat `json:"volume_usd"`
+		PriceChangePercentage    map[string]flexFloat `json:"price_change_percentage"`
+		Transactions             map[string]*Txns     `json:"transactions"`
+		BaseTokenPriceUSD        flexFloat            `json:"base_token_price_usd"`
+		QuoteTokenPriceUSD       flexFloat            `json:"quote_token_price_usd"`
+		BaseTokenPriceQuoteToken flexFloat            `json:"base_token_price_quote_token"`
 	} `json:"attributes"`
 	Relationships struct {
 		BaseToken  rawRel `json:"base_token"`
